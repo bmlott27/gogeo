@@ -5,7 +5,7 @@ import (
 )
 
 // Function for handling errors
-func checkErr(err error) {
+func CheckErr(err error) {
 	if err != nil {
 		fmt.Println(err)
 	}

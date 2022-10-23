@@ -1,31 +1,16 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 
+	"github.com/bmlott27/gogeo/postgres"
+	"github.com/bmlott27/gogeo/utilities"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 )
-
-const (
-	DB_USER     = "postgres"
-	DB_PASSWORD = "12345678"
-	DB_NAME     = "movies"
-)
-
-// DB set up
-func setupDB() *sql.DB {
-	dbinfo := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", DB_USER, DB_PASSWORD, DB_NAME)
-	db, err := sql.Open("postgres", dbinfo)
-
-	checkErr(err)
-
-	return db
-}
 
 type Movie struct {
 	MovieID   string `json:"movieid"`
@@ -63,33 +48,19 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8000", router))
 }
 
-// Function for handling messages
-func printMessage(message string) {
-	fmt.Println("")
-	fmt.Println(message)
-	fmt.Println("")
-}
-
-// Function for handling errors
-func checkErr(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
 // Get all movies
 
 // response and request handlers
 func GetMovies(w http.ResponseWriter, r *http.Request) {
-	db := setupDB()
+	db := postgres.Connect()
 
-	printMessage("Getting movies...")
+	fmt.Println("Getting movies...")
 
 	// Get all movies from movies table that don't have movieID = "1"
 	rows, err := db.Query("SELECT * FROM movies")
 
 	// check errors
-	checkErr(err)
+	utilities.CheckErr(err)
 
 	// var response []JsonResponse
 	var movies []Movie
@@ -103,7 +74,7 @@ func GetMovies(w http.ResponseWriter, r *http.Request) {
 		err = rows.Scan(&id, &movieID, &movieName)
 
 		// check errors
-		checkErr(err)
+		utilities.CheckErr(err)
 
 		movies = append(movies, Movie{MovieID: movieID, MovieName: movieName})
 	}
@@ -125,9 +96,9 @@ func CreateMovie(w http.ResponseWriter, r *http.Request) {
 	if movieID == "" || movieName == "" {
 		response = JsonResponse{Type: "error", Message: "You are missing movieID or movieName parameter."}
 	} else {
-		db := setupDB()
+		db := postgres.Connect()
 
-		printMessage("Inserting movie into DB")
+		fmt.Println("Inserting movie into DB")
 
 		fmt.Println("Inserting new movie with ID: " + movieID + " and name: " + movieName)
 
@@ -135,7 +106,7 @@ func CreateMovie(w http.ResponseWriter, r *http.Request) {
 		err := db.QueryRow("INSERT INTO movies(movieID, movieName) VALUES($1, $2) returning id;", movieID, movieName).Scan(&lastInsertID)
 
 		// check errors
-		checkErr(err)
+		utilities.CheckErr(err)
 
 		response = JsonResponse{Type: "success", Message: "The movie has been inserted successfully!"}
 	}
@@ -156,14 +127,14 @@ func DeleteMovie(w http.ResponseWriter, r *http.Request) {
 	if movieID == "" {
 		response = JsonResponse{Type: "error", Message: "You are missing movieID parameter."}
 	} else {
-		db := setupDB()
+		db := postgres.Connect()
 
-		printMessage("Deleting movie from DB")
+		fmt.Println("Deleting movie from DB")
 
 		_, err := db.Exec("DELETE FROM movies where movieID = $1", movieID)
 
 		// check errors
-		checkErr(err)
+		utilities.CheckErr(err)
 
 		response = JsonResponse{Type: "success", Message: "The movie has been deleted successfully!"}
 	}
@@ -175,16 +146,16 @@ func DeleteMovie(w http.ResponseWriter, r *http.Request) {
 
 // response and request handlers
 func DeleteMovies(w http.ResponseWriter, r *http.Request) {
-	db := setupDB()
+	db := postgres.Connect()
 
-	printMessage("Deleting all movies...")
+	fmt.Println("Deleting all movies...")
 
 	_, err := db.Exec("DELETE FROM movies")
 
 	// check errors
-	checkErr(err)
+	utilities.CheckErr(err)
 
-	printMessage("All movies have been deleted successfully!")
+	fmt.Println("All movies have been deleted successfully!")
 
 	var response = JsonResponse{Type: "success", Message: "All movies have been deleted successfully!"}
 
