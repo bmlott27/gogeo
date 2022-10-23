@@ -1,10 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/bmlott27/gogeo/postgres"
 	"github.com/bmlott27/gogeo/utilities"
@@ -12,15 +14,26 @@ import (
 	_ "github.com/lib/pq"
 )
 
-type Movie struct {
-	MovieID   string `json:"movieid"`
-	MovieName string `json:"moviename"`
+type County struct {
+	Id       string       `json:"id"`
+	CountyFP string       `json:"countyfp"`
+	Geom     MultiPolygon `json:"geom"`
+}
+
+type MultiPolygon struct {
+	Type        string           `json:"type"`
+	Coordinates [][][][2]float64 `json:"coordinates"`
 }
 
 type JsonResponse struct {
-	Type    string  `json:"type"`
-	Data    []Movie `json:"data"`
-	Message string  `json:"message"`
+	Type    string   `json:"type"`
+	Data    []County `json:"data"`
+	Message string   `json:"message"`
+}
+
+type NewCounty struct {
+	CountyFP string       `json:"countyfp"`
+	Geom     MultiPolygon `json:"geom"`
 }
 
 // Main function
@@ -31,133 +44,176 @@ func main() {
 
 	// Route handles & endpoints
 
-	// Get all movies
-	router.HandleFunc("/movies/", GetMovies).Methods("GET")
+	// Get all counties
+	router.HandleFunc("/counties/", GetCounties).Methods("GET")
 
-	// Create a movie
-	router.HandleFunc("/movies/", CreateMovie).Methods("POST")
+	// Get a county by its id
+	router.HandleFunc("/counties/{countyid}", GetCounty).Methods("GET")
 
-	// Delete a specific movie by the movieID
-	router.HandleFunc("/movies/{movieid}", DeleteMovie).Methods("DELETE")
+	// Insert a county
+	router.HandleFunc("/counties/", InsertCounty).Methods("PUT")
 
-	// Delete all movies
-	router.HandleFunc("/movies/", DeleteMovies).Methods("DELETE")
+	// Update a county
+	router.HandleFunc("/counties/{countyid}", UpdateCounty).Methods("POST")
+
+	// Delete a county by its id
+	router.HandleFunc("/counties/{countyid}", DeleteCounty).Methods("DELETE")
 
 	// serve the app
 	fmt.Println("Server at 8080")
-	log.Fatal(http.ListenAndServe(":8000", router))
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
 
-// Get all movies
-
-// response and request handlers
-func GetMovies(w http.ResponseWriter, r *http.Request) {
-	db := postgres.Connect()
-
-	fmt.Println("Getting movies...")
-
-	// Get all movies from movies table that don't have movieID = "1"
-	rows, err := db.Query("SELECT * FROM movies")
-
-	// check errors
-	utilities.CheckErr(err)
-
+// common method for creating return json
+func processRows(rows *sql.Rows) JsonResponse {
 	// var response []JsonResponse
-	var movies []Movie
+	var counties []County
 
 	// Foreach movie
 	for rows.Next() {
-		var id int
-		var movieID string
-		var movieName string
+		var id string
+		var countyFP string
+		var geom string
 
-		err = rows.Scan(&id, &movieID, &movieName)
-
-		// check errors
-		utilities.CheckErr(err)
-
-		movies = append(movies, Movie{MovieID: movieID, MovieName: movieName})
-	}
-
-	var response = JsonResponse{Type: "success", Data: movies}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Create a movie
-
-// response and request handlers
-func CreateMovie(w http.ResponseWriter, r *http.Request) {
-	movieID := r.FormValue("movieid")
-	movieName := r.FormValue("moviename")
-
-	var response = JsonResponse{}
-
-	if movieID == "" || movieName == "" {
-		response = JsonResponse{Type: "error", Message: "You are missing movieID or movieName parameter."}
-	} else {
-		db := postgres.Connect()
-
-		fmt.Println("Inserting movie into DB")
-
-		fmt.Println("Inserting new movie with ID: " + movieID + " and name: " + movieName)
-
-		var lastInsertID int
-		err := db.QueryRow("INSERT INTO movies(movieID, movieName) VALUES($1, $2) returning id;", movieID, movieName).Scan(&lastInsertID)
+		err := rows.Scan(&id, &countyFP, &geom)
 
 		// check errors
 		utilities.CheckErr(err)
+		geoJson := MultiPolygon{}
+		json.Unmarshal([]byte(geom), &geoJson)
 
-		response = JsonResponse{Type: "success", Message: "The movie has been inserted successfully!"}
+		counties = append(counties, County{Id: id, CountyFP: countyFP, Geom: geoJson})
 	}
 
-	json.NewEncoder(w).Encode(response)
+	return JsonResponse{Type: "success", Data: counties}
 }
 
-// Delete a movie
-
-// response and request handlers
-func DeleteMovie(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-
-	movieID := params["movieid"]
-
-	var response = JsonResponse{}
-
-	if movieID == "" {
-		response = JsonResponse{Type: "error", Message: "You are missing movieID parameter."}
-	} else {
-		db := postgres.Connect()
-
-		fmt.Println("Deleting movie from DB")
-
-		_, err := db.Exec("DELETE FROM movies where movieID = $1", movieID)
-
-		// check errors
-		utilities.CheckErr(err)
-
-		response = JsonResponse{Type: "success", Message: "The movie has been deleted successfully!"}
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Delete all movies
-
-// response and request handlers
-func DeleteMovies(w http.ResponseWriter, r *http.Request) {
+// Get counties
+func GetCounties(w http.ResponseWriter, r *http.Request) {
 	db := postgres.Connect()
 
-	fmt.Println("Deleting all movies...")
+	fmt.Println("Getting counties...")
 
-	_, err := db.Exec("DELETE FROM movies")
+	// Get all movies from movies table that don't have movieID = "1"
+	rows, err := db.Query(`SELECT id, "COUNTYFP", ST_AsGeoJson(geom) FROM al_counties_wgs84`)
 
 	// check errors
 	utilities.CheckErr(err)
 
-	fmt.Println("All movies have been deleted successfully!")
+	response := processRows(rows)
+	json.NewEncoder(w).Encode(response)
+}
 
-	var response = JsonResponse{Type: "success", Message: "All movies have been deleted successfully!"}
+// Get a single county
+func GetCounty(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	Id := params["countyid"]
+
+	var response = JsonResponse{}
+
+	if Id == "" {
+		response = JsonResponse{Type: "error", Message: "You are missing county id parameter."}
+	} else {
+		db := postgres.Connect()
+
+		fmt.Println("Getting county")
+
+		rows, err := db.Query(`SELECT id, "COUNTYFP", ST_AsGeoJson(geom) FROM al_counties_wgs84 WHERE id = $1`, Id)
+
+		// check errors
+		utilities.CheckErr(err)
+
+		response = processRows(rows)
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// Create a county
+func InsertCounty(w http.ResponseWriter, r *http.Request) {
+
+	var newCounty NewCounty
+	err := json.NewDecoder(r.Body).Decode(&newCounty)
+	utilities.CheckErr(err)
+
+	var response = JsonResponse{}
+
+	if err != nil {
+		response = JsonResponse{Type: "error", Message: "You are missing countyfp or geom parameter."}
+	} else {
+		db := postgres.Connect()
+
+		fmt.Println("Inserting county")
+
+		var lastInsertID int
+		geoJson, err := json.Marshal(newCounty.Geom)
+		utilities.CheckErr(err)
+
+		err = db.QueryRow(`INSERT INTO al_counties_wgs84("COUNTYFP", geom) VALUES($1, ST_GeomFromGeoJson($2)) returning id;`, newCounty.CountyFP, geoJson).Scan(&lastInsertID)
+
+		// check errors
+		utilities.CheckErr(err)
+
+		response = JsonResponse{Type: "success", Message: fmt.Sprintf("The county has been inserted successfully! New id: %s", strconv.Itoa(lastInsertID))}
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func UpdateCounty(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	Id := params["countyid"]
+
+	var newCounty NewCounty
+	err := json.NewDecoder(r.Body).Decode(&newCounty)
+	utilities.CheckErr(err)
+
+	var response = JsonResponse{}
+
+	if Id == "" {
+		response = JsonResponse{Type: "error", Message: "You are missing county id parameter."}
+	} else {
+		db := postgres.Connect()
+
+		fmt.Println("Updating county")
+		geoJson, err := json.Marshal(newCounty.Geom)
+		utilities.CheckErr(err)
+
+		_, err = db.Exec(`UPDATE al_counties_wgs84 SET "COUNTYFP" = $1, geom = ST_FromGeoJson($2) WHERE id = $3`, newCounty.CountyFP, geoJson, Id)
+
+		// check errors
+		utilities.CheckErr(err)
+
+		response = JsonResponse{Type: "success", Message: fmt.Sprintf("The county has been updated successfully! Id: %s", Id)}
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// response and request handlers
+func DeleteCounty(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	Id := params["countyid"]
+
+	var response = JsonResponse{}
+
+	if Id == "" {
+		response = JsonResponse{Type: "error", Message: "You are missing county id parameter."}
+	} else {
+		db := postgres.Connect()
+
+		fmt.Println("Deleting county")
+
+		_, err := db.Exec(`DELETE FROM al_counties_wgs84 WHERE id = $1`, Id)
+
+		// check errors
+		utilities.CheckErr(err)
+
+		response = JsonResponse{Type: "success", Message: fmt.Sprintf("The county has been deleted successfully! Id: %s", Id)}
+	}
 
 	json.NewEncoder(w).Encode(response)
 }
