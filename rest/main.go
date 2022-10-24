@@ -51,10 +51,10 @@ func main() {
 	router.HandleFunc("/counties/{countyid}", GetCounty).Methods("GET")
 
 	// Insert a county
-	router.HandleFunc("/counties/", InsertCounty).Methods("PUT")
+	router.HandleFunc("/counties/", InsertCounty).Methods("POST")
 
 	// Update a county
-	router.HandleFunc("/counties/{countyid}", UpdateCounty).Methods("POST")
+	router.HandleFunc("/counties/{countyid}", UpdateCounty).Methods("PUT")
 
 	// Delete a county by its id
 	router.HandleFunc("/counties/{countyid}", DeleteCounty).Methods("DELETE")
@@ -85,7 +85,7 @@ func processRows(rows *sql.Rows) JsonResponse {
 		counties = append(counties, County{Id: id, CountyFP: countyFP, Geom: geoJson})
 	}
 
-	return JsonResponse{Type: "success", Data: counties}
+	return JsonResponse{Type: "success", Data: counties, Message: fmt.Sprintf("Returned %s counties", strconv.Itoa(len(counties)))}
 }
 
 // Get counties
