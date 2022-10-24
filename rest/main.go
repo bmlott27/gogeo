@@ -181,7 +181,7 @@ func UpdateCounty(w http.ResponseWriter, r *http.Request) {
 		geoJson, err := json.Marshal(newCounty.Geom)
 		utilities.CheckErr(err)
 
-		_, err = db.Exec(`UPDATE al_counties_wgs84 SET "COUNTYFP" = $1, geom = ST_FromGeoJson($2) WHERE id = $3`, newCounty.CountyFP, geoJson, Id)
+		_, err = db.Exec(`UPDATE al_counties_wgs84 SET "COUNTYFP" = $1, geom = ST_GeomFromGeoJson($2) WHERE id = $3`, newCounty.CountyFP, geoJson, Id)
 
 		// check errors
 		utilities.CheckErr(err)
