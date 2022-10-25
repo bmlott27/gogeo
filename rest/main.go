@@ -14,6 +14,12 @@ import (
 	_ "github.com/lib/pq"
 )
 
+type JsonResponse struct {
+	Type    string   `json:"type"`
+	Data    []County `json:"data"`
+	Message string   `json:"message"`
+}
+
 type County struct {
 	Id       string       `json:"id"`
 	CountyFP string       `json:"countyfp"`
@@ -23,12 +29,6 @@ type County struct {
 type MultiPolygon struct {
 	Type        string           `json:"type"`
 	Coordinates [][][][2]float64 `json:"coordinates"`
-}
-
-type JsonResponse struct {
-	Type    string   `json:"type"`
-	Data    []County `json:"data"`
-	Message string   `json:"message"`
 }
 
 type NewCounty struct {

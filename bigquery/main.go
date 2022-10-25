@@ -77,7 +77,7 @@ func main() {
 		}
 	}
 
-	// insert the items into the table
+	// insert the remaining items into the table
 	if len(items) > 0 {
 		err = insertRows(GC_PROJECT, GC_DATASET, GC_TABLE, items)
 
